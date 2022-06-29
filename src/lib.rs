@@ -1,5 +1,5 @@
-use std::iter::zip;
 use std::fmt;
+use std::iter::zip;
 
 pub struct Client {
     pub name: String,
@@ -30,11 +30,11 @@ pub fn construct_clients() -> Vec<Client> {
 pub fn run(clients: Vec<Client>) {
     loop {
         // Prompt for sender/receiver
-        let sender_object = get_client_object("sender".to_string(), &clients);
-        let receiver_object = get_client_object("receiver".to_string(), &clients);
+        let mut sender_object = get_client_object("sender".to_string(), &clients);
+        let mut receiver_object = get_client_object("receiver".to_string(), &clients);
 
         // Prompt for amount until user inputs an integer
-        let amount: i32;
+        let amount: f32;
         loop {
             match user_input::get_amount() {
                 Ok(n) => {
@@ -47,6 +47,12 @@ pub fn run(clients: Vec<Client>) {
         println!("{}, {}, {}", sender_object, receiver_object, amount);
 
         // Perform transaction
+        if !has_client_sufficient_funds(sender_object, amount) {
+            println!("Client {} has insufficient funds", sender_object.name);
+            continue;
+        }
+
+        transfer_money(&mut sender_object, &mut receiver_object, amount)
     }
 }
 
@@ -63,20 +69,21 @@ mod user_input {
         client_name.trim().to_string()
     }
 
-    pub fn get_amount() -> Result<i32, Box<dyn Error>> {
+    pub fn get_amount() -> Result<f32, Box<dyn Error>> {
         println!("Amount:");
         let mut user_input = String::new();
         io::stdin()
             .read_line(&mut user_input)
             .expect("Failed to read amount");
 
-        match user_input.trim().parse::<i32>() {
+        match user_input.trim().parse::<f32>() {
             Ok(n) => Ok(n),
             Err(e) => Err(Box::new(e)),
         }
     }
 }
 
+mod transaction_handling {}
 #[derive(Debug, Clone)]
 struct LookupError;
 
@@ -99,11 +106,64 @@ fn get_client_object<'a>(client_type: String, clients_vec: &'a Vec<Client>) -> &
 fn lookup_client<'a>(name: &str, clients: &'a Vec<Client>) -> Result<&'a Client, Box<LookupError>> {
     for client in clients.into_iter() {
         if client.name == name {
-            return Ok(client)
+            return Ok(client);
         };
     }
 
     Err(Box::new(LookupError))
 }
 
-mod transaction_handling {}
+fn has_client_sufficient_funds(client: &Client, amount: f32) -> bool {
+    match client.balance >= amount {
+        true => return true,
+        false => return false,
+    }
+}
+
+fn transfer_money(sender: &mut Client, receiver: &mut Client, amount: f32) {
+    sender.balance -= amount;
+    receiver.balance += amount;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_has_client_sufficient_funds_true() {
+        let client = Client {
+            name: "Anna".to_string(),
+            balance: 300.0,
+        };
+
+        assert_eq!(has_client_sufficient_funds(&client, 100.0), true);
+    }
+
+    #[test]
+    fn test_has_client_sufficient_funds_false() {
+        let client = Client {
+            name: "Anna".to_string(),
+            balance: 300.0,
+        };
+
+        assert_eq!(has_client_sufficient_funds(&client, 400.0), false);
+    }
+
+    #[test]
+    fn test_transfer_money() {
+        let mut sender = Client {
+            name: "Anna".to_string(),
+            balance: 300.0,
+        };
+
+        let mut receiver = Client {
+            name: "Bob".to_string(),
+            balance: 300.0,
+        };
+
+        transfer_money(&mut sender, &mut receiver, 300.0);
+
+        assert_eq!(sender.balance, 0.0);
+        assert_eq!(receiver.balance, 600.0);
+    }
+}
