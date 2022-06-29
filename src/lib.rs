@@ -1,169 +1,235 @@
 use std::fmt;
 use std::iter::zip;
 
-pub struct Client {
-    pub name: String,
-    pub balance: f32,
+#[derive(Debug)]
+pub struct Account {
+    name: String,
+    balance: f32
 }
 
-impl fmt::Display for Client {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({}, {})", self.name, self.balance)
+impl Account {
+    fn new(name: String, balance: f32) -> Account {
+        Account { name, balance }
     }
 }
 
-pub fn construct_clients() -> Vec<Client> {
+struct Bank { 
+    accounts: Vec<Account>
+}
+
+impl Bank {
+    fn new() -> Bank {
+        Bank { accounts: vec![] }
+    }
+    
+    fn add_account(&mut self, account: Account) {
+        self.accounts.push(account)
+    }
+    
+    fn transfer(&mut self, source: usize, dest: usize, amount: f32) {
+        self.accounts[source].balance -= amount;
+        self.accounts[dest].balance += amount;
+    }
+    
+    fn get_account(&self, index: usize) -> &Account {
+        return &self.accounts[index]
+    }
+}
+
+
+
+// impl fmt::Display for Client {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(f, "({}, {})", self.name, self.balance)
+//     }
+// }
+
+// Basically a bank
+// struct Clients {
+//     clients: Vec<Client>,
+// }
+
+// impl Clients {
+//     pub fn transfer(&self, recipient: &mut Client, sender: &mut Client, amount: f32) {
+//         sender.balance += amount;
+//         recipient.balance -= amount;
+//     }
+
+//     // pub fn lookup_client()
+// }
+
+pub fn construct_accounts() -> Vec<Account> {
     let names = vec!["Adam", "Bob", "Charlie", "David"];
     let balances = vec![1000.0, 2000.0, 500.0, 1300.0];
-    let mut clients = Vec::new();
+    let mut accounts = Vec::new();
 
     for (name, balance) in zip(names, balances) {
-        clients.push(Client {
+
+        accounts.push(Account {
             name: name.to_string(),
             balance,
         })
     }
 
-    clients
+    accounts
 }
 
-pub fn run(clients: Vec<Client>) {
-    loop {
+pub fn run() {
+    // loop {
         // Prompt for sender/receiver
-        let mut sender_object = get_client_object("sender".to_string(), &clients);
-        let mut receiver_object = get_client_object("receiver".to_string(), &clients);
+        // let mut sender_object = get_client_object("sender".to_string(), &clients);
+        // let mut receiver_object = get_client_object("receiver".to_string(), &clients);
 
         // Prompt for amount until user inputs an integer
-        let amount: f32;
-        loop {
-            match user_input::get_amount() {
-                Ok(n) => {
-                    amount = n;
-                    break;
-                }
-                Err(_) => println!("Invalid amount"),
-            };
-        }
-        println!("{}, {}, {}", sender_object, receiver_object, amount);
+        // let amount: f32;
+        // loop {
+        //     match user_input::get_amount() {
+        //         Ok(n) => {
+        //             amount = n;
+        //             break;
+        //         }
+        //         Err(_) => println!("Invalid amount"),
+        //     };
+        // }
+        // println!("{}, {}, {}", sender_object, receiver_object, amount);
 
-        // Perform transaction
-        if !has_client_sufficient_funds(sender_object, amount) {
-            println!("Client {} has insufficient funds", sender_object.name);
-            continue;
-        }
+        // // Perform transaction
+        // if !has_client_sufficient_funds(sender_object, amount) {
+        //     println!("Client {} has insufficient funds", sender_object.name);
+        //     continue;
+        // }
 
-        transfer_money(&mut sender_object, &mut receiver_object, amount)
-    }
+        // transfer_money(&mut sender_object, &mut receiver_object, amount)
+
+
+    // }
+
+
+    let mut a1 = Account {name: "Anna".to_string(), balance: 300.0};
+    let mut a2 = Account {name: "Bob".to_string(), balance: 500.0};
+
+    let mut bank = Bank::new();
+    bank.add_account(a1);
+    bank.add_account(a2);
+
+    println!("{:?}", bank.get_account(0));
+    println!("{:?}", bank.get_account(1));
+    
+    bank.transfer(0, 1, 100.0);
+
+    println!("{:?}", bank.get_account(0));
+    println!("{:?}", bank.get_account(1));
+
 }
 
-mod user_input {
-    use std::{error::Error, io};
+// mod user_input {
+//     use std::{error::Error, io};
 
-    pub fn get_client_name_from_user(client_type: &str) -> String {
-        println!("Name of {}:", client_type);
-        let mut client_name = String::new();
-        io::stdin()
-            .read_line(&mut client_name)
-            .expect(format!("Failed to read {}'s name", client_type).as_str());
+//     pub fn get_client_name_from_user(client_type: &str) -> String {
+//         println!("Name of {}:", client_type);
+//         let mut client_name = String::new();
+//         io::stdin()
+//             .read_line(&mut client_name)
+//             .expect(format!("Failed to read {}'s name", client_type).as_str());
 
-        client_name.trim().to_string()
-    }
+//         client_name.trim().to_string()
+//     }
 
-    pub fn get_amount() -> Result<f32, Box<dyn Error>> {
-        println!("Amount:");
-        let mut user_input = String::new();
-        io::stdin()
-            .read_line(&mut user_input)
-            .expect("Failed to read amount");
+//     pub fn get_amount() -> Result<f32, Box<dyn Error>> {
+//         println!("Amount:");
+//         let mut user_input = String::new();
+//         io::stdin()
+//             .read_line(&mut user_input)
+//             .expect("Failed to read amount");
 
-        match user_input.trim().parse::<f32>() {
-            Ok(n) => Ok(n),
-            Err(e) => Err(Box::new(e)),
-        }
-    }
-}
+//         match user_input.trim().parse::<f32>() {
+//             Ok(n) => Ok(n),
+//             Err(e) => Err(Box::new(e)),
+//         }
+//     }
+// }
 
-mod transaction_handling {}
-#[derive(Debug, Clone)]
-struct LookupError;
+// mod transaction_handling {}
+// #[derive(Debug, Clone)]
+// struct LookupError;
 
-impl fmt::Display for LookupError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Customer doesn't exist")
-    }
-}
+// impl fmt::Display for LookupError {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "Customer doesn't exist")
+//     }
+// }
 
-fn get_client_object<'a>(client_type: String, clients_vec: &'a Vec<Client>) -> &'a Client {
-    loop {
-        let client_name = user_input::get_client_name_from_user(&client_type);
-        match lookup_client(&client_name, clients_vec) {
-            Ok(c) => return c,
-            Err(e) => println!("{}", e),
-        }
-    }
-}
+// fn get_client_object<'a>(client_type: String, clients_vec: &'a Vec<Client>) -> &'a Client {
+//     loop {
+//         let client_name = user_input::get_client_name_from_user(&client_type);
+//         match lookup_client(&client_name, clients_vec) {
+//             Ok(c) => return c,
+//             Err(e) => println!("{}", e),
+//         }
+//     }
+// }
 
-fn lookup_client<'a>(name: &str, clients: &'a Vec<Client>) -> Result<&'a Client, Box<LookupError>> {
-    for client in clients.into_iter() {
-        if client.name == name {
-            return Ok(client);
-        };
-    }
+// fn lookup_client<'a>(name: &str, clients: &'a Vec<Client>) -> Result<&'a Client, Box<LookupError>> {
+//     for client in clients.into_iter() {
+//         if client.name == name {
+//             return Ok(client);
+//         };
+//     }
 
-    Err(Box::new(LookupError))
-}
+//     Err(Box::new(LookupError))
+// }
 
-fn has_client_sufficient_funds(client: &Client, amount: f32) -> bool {
-    match client.balance >= amount {
-        true => return true,
-        false => return false,
-    }
-}
+// fn has_client_sufficient_funds(client: &Client, amount: f32) -> bool {
+//     match client.balance >= amount {
+//         true => return true,
+//         false => return false,
+//     }
+// }
 
-fn transfer_money(sender: &mut Client, receiver: &mut Client, amount: f32) {
-    sender.balance -= amount;
-    receiver.balance += amount;
-}
+// fn transfer_money(sender: &mut Client, receiver: &mut Client, amount: f32) {
+//     sender.balance -= amount;
+//     receiver.balance += amount;
+// }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    #[test]
-    fn test_has_client_sufficient_funds_true() {
-        let client = Client {
-            name: "Anna".to_string(),
-            balance: 300.0,
-        };
+//     #[test]
+//     fn test_has_client_sufficient_funds_true() {
+//         let client = Client {
+//             name: "Anna".to_string(),
+//             balance: 300.0,
+//         };
 
-        assert_eq!(has_client_sufficient_funds(&client, 100.0), true);
-    }
+//         assert_eq!(has_client_sufficient_funds(&client, 100.0), true);
+//     }
 
-    #[test]
-    fn test_has_client_sufficient_funds_false() {
-        let client = Client {
-            name: "Anna".to_string(),
-            balance: 300.0,
-        };
+//     #[test]
+//     fn test_has_client_sufficient_funds_false() {
+//         let client = Client {
+//             name: "Anna".to_string(),
+//             balance: 300.0,
+//         };
 
-        assert_eq!(has_client_sufficient_funds(&client, 400.0), false);
-    }
+//         assert_eq!(has_client_sufficient_funds(&client, 400.0), false);
+//     }
 
-    #[test]
-    fn test_transfer_money() {
-        let mut sender = Client {
-            name: "Anna".to_string(),
-            balance: 300.0,
-        };
+//     #[test]
+//     fn test_transfer_money() {
+//         let mut sender = Client {
+//             name: "Anna".to_string(),
+//             balance: 300.0,
+//         };
 
-        let mut receiver = Client {
-            name: "Bob".to_string(),
-            balance: 300.0,
-        };
+//         let mut receiver = Client {
+//             name: "Bob".to_string(),
+//             balance: 300.0,
+//         };
 
-        transfer_money(&mut sender, &mut receiver, 300.0);
+//         transfer_money(&mut sender, &mut receiver, 300.0);
 
-        assert_eq!(sender.balance, 0.0);
-        assert_eq!(receiver.balance, 600.0);
-    }
-}
+//         assert_eq!(sender.balance, 0.0);
+//         assert_eq!(receiver.balance, 600.0);
+//     }
+// }
