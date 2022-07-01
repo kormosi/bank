@@ -1,7 +1,7 @@
 fn main() {
     // Construct clients
-    // let clients = bank::construct_clients();
+    let clients = bank::construct_accounts();
 
     // Run app
-    bank::run()
+    bank::run(clients)
 }

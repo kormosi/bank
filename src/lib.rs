@@ -1,10 +1,19 @@
 use std::fmt;
 use std::iter::zip;
 
+#[derive(Debug, Clone)]
+struct LookupError;
+
+impl fmt::Display for LookupError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Customer doesn't exist")
+    }
+}
+
 #[derive(Debug)]
 pub struct Account {
     name: String,
-    balance: f32
+    balance: f32,
 }
 
 impl Account {
@@ -13,50 +22,56 @@ impl Account {
     }
 }
 
-struct Bank { 
-    accounts: Vec<Account>
+impl fmt::Display for Account {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}, {})", self.name, self.balance)
+    }
+}
+
+struct Bank {
+    accounts: Vec<Account>,
 }
 
 impl Bank {
     fn new() -> Bank {
         Bank { accounts: vec![] }
     }
-    
+
     fn add_account(&mut self, account: Account) {
         self.accounts.push(account)
     }
-    
-    fn transfer(&mut self, source: usize, dest: usize, amount: f32) {
-        self.accounts[source].balance -= amount;
-        self.accounts[dest].balance += amount;
+
+    fn transfer(&mut self, sender_name: &str, receiver_name: &str, amount: f32) {
+
+        if let Ok(sender) = self.get_account(sender_name) {
+            sender.balance -= amount;
+        }
+        if let Ok(receiver) = self.get_account(receiver_name) {
+            receiver.balance += amount;
+        }
     }
-    
-    fn get_account(&self, index: usize) -> &Account {
-        return &self.accounts[index]
+
+    fn get_account(&mut self, client_name: &str) -> Result<&mut Account, Box<LookupError>> {
+        for account in &mut self.accounts {
+            if &account.name == client_name {
+                return Ok(account);
+            };
+        }
+
+        Err(Box::new(LookupError))
+    }
+
+    // Runs until a valid client name is provided
+    fn get_valid_account_name(&mut self, client_type: String) -> String {
+        loop {
+            let client_name = user_input::get_client_name_from_user(&client_type);
+            match self.get_account(&client_name) {
+                Ok(_c) => return client_name,
+                Err(e) => println!("{}", e),
+            }
+        }
     }
 }
-
-
-
-// impl fmt::Display for Client {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         write!(f, "({}, {})", self.name, self.balance)
-//     }
-// }
-
-// Basically a bank
-// struct Clients {
-//     clients: Vec<Client>,
-// }
-
-// impl Clients {
-//     pub fn transfer(&self, recipient: &mut Client, sender: &mut Client, amount: f32) {
-//         sender.balance += amount;
-//         recipient.balance -= amount;
-//     }
-
-//     // pub fn lookup_client()
-// }
 
 pub fn construct_accounts() -> Vec<Account> {
     let names = vec!["Adam", "Bob", "Charlie", "David"];
@@ -64,7 +79,6 @@ pub fn construct_accounts() -> Vec<Account> {
     let mut accounts = Vec::new();
 
     for (name, balance) in zip(names, balances) {
-
         accounts.push(Account {
             name: name.to_string(),
             balance,
@@ -74,80 +88,64 @@ pub fn construct_accounts() -> Vec<Account> {
     accounts
 }
 
-pub fn run() {
-    // loop {
-        // Prompt for sender/receiver
-        // let mut sender_object = get_client_object("sender".to_string(), &clients);
-        // let mut receiver_object = get_client_object("receiver".to_string(), &clients);
+pub fn run(accounts: Vec<Account>) {
 
-        // Prompt for amount until user inputs an integer
-        // let amount: f32;
-        // loop {
-        //     match user_input::get_amount() {
-        //         Ok(n) => {
-        //             amount = n;
-        //             break;
-        //         }
-        //         Err(_) => println!("Invalid amount"),
-        //     };
-        // }
-        // println!("{}, {}, {}", sender_object, receiver_object, amount);
-
-        // // Perform transaction
-        // if !has_client_sufficient_funds(sender_object, amount) {
-        //     println!("Client {} has insufficient funds", sender_object.name);
-        //     continue;
-        // }
-
-        // transfer_money(&mut sender_object, &mut receiver_object, amount)
-
-
-    // }
-
-
-    let mut a1 = Account {name: "Anna".to_string(), balance: 300.0};
-    let mut a2 = Account {name: "Bob".to_string(), balance: 500.0};
-
+    // Initialize the bank struct
     let mut bank = Bank::new();
-    bank.add_account(a1);
-    bank.add_account(a2);
+    bank.accounts = accounts;
 
-    println!("{:?}", bank.get_account(0));
-    println!("{:?}", bank.get_account(1));
-    
-    bank.transfer(0, 1, 100.0);
+    loop {
+        // Prompt for sender/receiver
+        let sender_name = bank.get_valid_account_name("sender".to_string());
+        let receiver_name = bank.get_valid_account_name("receiver".to_string());
+        // All consecutive methods will get a valid account name.
+        // No further checks need to be made.
 
-    println!("{:?}", bank.get_account(0));
-    println!("{:?}", bank.get_account(1));
+        // Prompt for amount
+        let amount = user_input::get_valid_amount();
 
+
+        println!("{:?}", bank.get_account(&sender_name));
+        println!("{:?}", bank.get_account(&receiver_name));
+
+        bank.transfer(&sender_name, &receiver_name, amount);
+
+        println!("");
+
+        println!("{:?}", bank.get_account(&sender_name));
+        println!("{:?}", bank.get_account(&receiver_name));
+    }
 }
 
-// mod user_input {
-//     use std::{error::Error, io};
+mod user_input {
+    use std::io;
 
-//     pub fn get_client_name_from_user(client_type: &str) -> String {
-//         println!("Name of {}:", client_type);
-//         let mut client_name = String::new();
-//         io::stdin()
-//             .read_line(&mut client_name)
-//             .expect(format!("Failed to read {}'s name", client_type).as_str());
+    pub fn get_client_name_from_user(client_type: &String) -> String {
+        println!("Name of {}:", client_type);
+        let mut client_name = String::new();
+        io::stdin()
+            .read_line(&mut client_name)
+            .expect(format!("Failed to read {}'s name", client_type).as_str());
 
-//         client_name.trim().to_string()
-//     }
+        client_name.trim().to_string()
+    }
 
-//     pub fn get_amount() -> Result<f32, Box<dyn Error>> {
-//         println!("Amount:");
-//         let mut user_input = String::new();
-//         io::stdin()
-//             .read_line(&mut user_input)
-//             .expect("Failed to read amount");
+    // Runs until a valid amount is provided
+    pub fn get_valid_amount() -> f32 {
+        println!("Amount:");
+        let mut user_input = String::new();
+        loop {
+            io::stdin()
+                .read_line(&mut user_input)
+                .expect("Failed to read amount");
 
-//         match user_input.trim().parse::<f32>() {
-//             Ok(n) => Ok(n),
-//             Err(e) => Err(Box::new(e)),
-//         }
-//     }
-// }
+            match user_input.trim().parse::<f32>() {
+                Ok(n) => return n,
+                Err(_e) => println!("Invalid amount"),
+            }
+        }
+    }
+}
 
 // mod transaction_handling {}
 // #[derive(Debug, Clone)]
