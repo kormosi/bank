@@ -1,7 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::Display;
 use std::io::{self, Write};
+use std::process::exit;
+
+use hashbrown::HashMap;
 
 pub fn init_bank() -> Bank {
     Bank::new(vec![
@@ -27,6 +30,14 @@ impl Account {
     fn has_sufficient_funds(&self, amount: Amount) -> bool {
         self.balance - amount < 0
     }
+
+    fn subtract_funds(&mut self, amount: Amount) {
+        self.balance -= amount;
+    }
+
+    fn add_funds(&mut self, amount: Amount) {
+        self.balance += amount;
+    }
 }
 
 impl Display for Account {
@@ -51,23 +62,16 @@ impl Bank {
         bank
     }
 
-    fn verify_accounts(&self, tx_info: &TXInfo) -> Result<(HashMap<&str, &Account>), AccountError> {
-        let mut from = self.accounts.get(&tx_info.from).ok_or(AccountError)?;
-        let mut to = self.accounts.get(&tx_info.to).ok_or(AccountError)?;
-
-        Ok(HashMap::from([
-            ("from", from),
-            ("to", to),
-        ]))
-    }
-
-    fn handle_transaction(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn handle_transaction(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let tx_info = get_tx_info()?;
-        let accounts = self.verify_accounts(&tx_info)?;
 
-        if !accounts.get("from").ok_or(AccountError)?.has_sufficient_funds(tx_info.amount) {
-            return Err(Box::new(AccountError))
+        if let Some([from, to]) = self.accounts.get_many_mut([&tx_info.from, &tx_info.to]) {
+            if from.has_sufficient_funds(tx_info.amount) {
+                from.subtract_funds(tx_info.amount);
+                to.add_funds(tx_info.amount);
+            }
         }
+
         Ok(())
     }
 }
@@ -82,7 +86,6 @@ impl Display for BankError {
         write!(f, "Generic bank error")
     }
 }
-
 
 #[derive(Debug)]
 struct AccountError;
@@ -121,7 +124,8 @@ fn print_instructions() {
     println!(
         "
 i: account info, 
-t: perform transaction\n"
+t: perform transaction\n
+q: quit\n"
     );
 }
 
@@ -136,7 +140,7 @@ fn prompt_and_get_input(prompt: &str) -> Result<String, io::Error> {
 
 fn get_valid_instruction_from_user() -> Result<String, io::Error> {
     let mut user_input = String::new();
-    let valid_inputs = HashSet::from(["i", "t"]);
+    let valid_inputs = HashSet::from(["i", "t", "q"]);
 
     loop {
         print!("#: ");
@@ -150,13 +154,14 @@ fn get_valid_instruction_from_user() -> Result<String, io::Error> {
     }
 }
 
-pub fn run_app(bank: Bank) -> Result<i8, Box<dyn std::error::Error>> {
+pub fn run_app(mut bank: Bank) -> Result<i8, Box<dyn std::error::Error>> {
     print_instructions();
 
     loop {
         let instruction = get_valid_instruction_from_user()?;
         match instruction.as_str() {
             "t" => bank.handle_transaction(),
+            "q" => exit(0),
             _ => todo!(),
         };
     }
