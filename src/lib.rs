@@ -28,7 +28,7 @@ impl Account {
     }
 
     fn has_sufficient_funds(&self, amount: Amount) -> bool {
-        self.balance - amount < 0
+        self.balance - amount > 0
     }
 
     fn subtract_funds(&mut self, amount: Amount) {
@@ -69,9 +69,21 @@ impl Bank {
             if from.has_sufficient_funds(tx_info.amount) {
                 from.subtract_funds(tx_info.amount);
                 to.add_funds(tx_info.amount);
-            }
-        }
+            } 
 
+            // else {
+            //     return "insufficient funds error"
+            // }
+        } else {
+            //     return "no such account"
+        }
+        Ok(())
+    }
+
+    fn show_all_accounts(&self) -> Result<(), Box<dyn std::error::Error>> {
+        for acc in &self.accounts {
+            println!("{}", acc.1);
+        }
         Ok(())
     }
 }
@@ -124,7 +136,7 @@ fn print_instructions() {
     println!(
         "
 i: account info, 
-t: perform transaction\n
+t: perform transaction,
 q: quit\n"
     );
 }
@@ -161,10 +173,12 @@ pub fn run_app(mut bank: Bank) -> Result<i8, Box<dyn std::error::Error>> {
         let instruction = get_valid_instruction_from_user()?;
         match instruction.as_str() {
             "t" => bank.handle_transaction(),
-            "q" => exit(0),
-            _ => todo!(),
+            "i" => bank.show_all_accounts(),
+            "q" => return Ok(1),
+            _ => {
+                println!("invalid instruction");
+                continue;
+            }
         };
     }
-
-    Ok(1)
 }
