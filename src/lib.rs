@@ -2,9 +2,11 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::Display;
 use std::io::{self, Write};
+use std::num::ParseIntError;
 use std::process::exit;
 
 use hashbrown::HashMap;
+use thiserror::Error;
 
 pub fn init_bank() -> Bank {
     Bank::new(vec![
@@ -46,6 +48,27 @@ impl Display for Account {
     }
 }
 
+#[derive(Error, Debug)]
+#[error("Insufficient funds error")]
+struct InsufficientFundsError;
+
+#[derive(Error, Debug)]
+#[error("This account does not exist")]
+struct AccountDoesNotExistError;
+
+
+#[derive(Error, Debug)]
+pub enum CustomError {
+    #[error(transparent)]
+    AccountDoesNotExistError(#[from] AccountDoesNotExistError),
+    #[error(transparent)]
+    InsufficientFundsError(#[from] InsufficientFundsError),
+    #[error("Custom I/O Error")]
+    IOError(#[from] std::io::Error),
+    #[error("Custom ParseInt Error")]
+    ParseIntError(#[from] std::num::ParseIntError),
+}
+
 #[derive(Debug)]
 pub struct Bank {
     accounts: HashMap<String, Account>,
@@ -62,18 +85,16 @@ impl Bank {
         bank
     }
 
-    fn handle_transaction(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn handle_transaction(&mut self) -> Result<(), CustomError> {
         let tx_info = get_tx_info()?;
 
         if let Some([from, to]) = self.accounts.get_many_mut([&tx_info.from, &tx_info.to]) {
             if from.has_sufficient_funds(tx_info.amount) {
                 from.subtract_funds(tx_info.amount);
                 to.add_funds(tx_info.amount);
-            } 
-
-            // else {
-            //     return "insufficient funds error"
-            // }
+            } else {
+                return "insufficient funds error";
+            }
         } else {
             //     return "no such account"
         }
@@ -99,17 +120,6 @@ impl Display for BankError {
     }
 }
 
-#[derive(Debug)]
-struct AccountError;
-
-impl Error for AccountError {}
-
-impl Display for AccountError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Generic account error")
-    }
-}
-
 impl Display for Bank {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.accounts.iter().fold(Ok(()), |result, k_v| {
@@ -124,7 +134,9 @@ struct TXInfo {
     amount: Amount,
 }
 
-fn get_tx_info() -> Result<TXInfo, Box<dyn std::error::Error>> {
+enum TXInfoError {}
+
+fn get_tx_info() -> Result<TXInfo, CustomError> {
     let from = prompt_and_get_input("from")?;
     let to = prompt_and_get_input("to")?;
     let amount = prompt_and_get_input("amount")?;
