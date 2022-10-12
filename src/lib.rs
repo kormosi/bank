@@ -50,12 +50,11 @@ impl Display for Account {
 
 #[derive(Error, Debug)]
 #[error("Insufficient funds error")]
-struct InsufficientFundsError;
+pub struct InsufficientFundsError;
 
 #[derive(Error, Debug)]
 #[error("This account does not exist")]
-struct AccountDoesNotExistError;
-
+pub struct AccountDoesNotExistError;
 
 #[derive(Error, Debug)]
 pub enum CustomError {
@@ -93,19 +92,20 @@ impl Bank {
                 from.subtract_funds(tx_info.amount);
                 to.add_funds(tx_info.amount);
             } else {
-                return "insufficient funds error";
+                return Err(CustomError::InsufficientFundsError(InsufficientFundsError));
             }
         } else {
-            //     return "no such account"
+            return Err(CustomError::AccountDoesNotExistError(
+                AccountDoesNotExistError,
+            ));
         }
         Ok(())
     }
 
-    fn show_all_accounts(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn show_all_accounts(&self) {
         for acc in &self.accounts {
             println!("{}", acc.1);
         }
-        Ok(())
     }
 }
 
@@ -134,7 +134,6 @@ struct TXInfo {
     amount: Amount,
 }
 
-enum TXInfoError {}
 
 fn get_tx_info() -> Result<TXInfo, CustomError> {
     let from = prompt_and_get_input("from")?;
@@ -184,7 +183,12 @@ pub fn run_app(mut bank: Bank) -> Result<i8, Box<dyn std::error::Error>> {
     loop {
         let instruction = get_valid_instruction_from_user()?;
         match instruction.as_str() {
-            "t" => bank.handle_transaction(),
+            "t" => match bank.handle_transaction() {
+                Ok(_) => continue,
+                Err(err) => match err {
+                    e => println!("{}", e)
+                }
+            },
             "i" => bank.show_all_accounts(),
             "q" => return Ok(1),
             _ => {
