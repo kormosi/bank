@@ -52,9 +52,26 @@ impl Display for Account {
 #[error("Insufficient funds error")]
 pub struct InsufficientFundsError;
 
+#[derive(Debug)]
+struct AccountNamesTuple(String, String);
+
+impl Display for AccountNamesTuple {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            write!(f, "'{}'", self.0)
+        } else if self.1.is_empty() {
+            write!(f, "'{}'", self.1)
+        } else {
+            write!(f, "'{}' and '{}'", self.0, self.1)
+        }
+    }
+}
+
 #[derive(Error, Debug)]
-#[error("This account does not exist")]
-pub struct AccountDoesNotExistError;
+#[error("Account(s) {} not found", (account_name))]
+pub struct AccountDoesNotExistError {
+    account_name: AccountNamesTuple,
+}
 
 #[derive(Error, Debug)]
 pub enum CustomError {
@@ -95,9 +112,36 @@ impl Bank {
                 return Err(CustomError::InsufficientFundsError(InsufficientFundsError));
             }
         } else {
-            return Err(CustomError::AccountDoesNotExistError(
-                AccountDoesNotExistError,
-            ));
+            match (
+                self.accounts.contains_key(&tx_info.from),
+                self.accounts.contains_key(&tx_info.to),
+            ) {
+                (false, true) => {
+                    return Err(CustomError::AccountDoesNotExistError(
+                        AccountDoesNotExistError {
+                            account_name: AccountNamesTuple(tx_info.from, "".to_string()),
+                        },
+                    ))
+                }
+                (true, false) => {
+                    return Err(CustomError::AccountDoesNotExistError(
+                        AccountDoesNotExistError {
+                            account_name: AccountNamesTuple("".to_string(), tx_info.to),
+                        },
+                    ))
+                }
+                (false, false) => {
+                    return Err(CustomError::AccountDoesNotExistError(
+                        AccountDoesNotExistError {
+                            account_name: AccountNamesTuple(tx_info.from, tx_info.to),
+                        },
+                    ))
+                }
+                (true, true) => unreachable!(),
+            }
+            // return Err(CustomError::AccountDoesNotExistError(
+            //     AccountDoesNotExistError,
+            // ));
         }
         Ok(())
     }
@@ -133,7 +177,6 @@ struct TXInfo {
     to: String,
     amount: Amount,
 }
-
 
 fn get_tx_info() -> Result<TXInfo, CustomError> {
     let from = prompt_and_get_input("from")?;
@@ -185,9 +228,7 @@ pub fn run_app(mut bank: Bank) -> Result<i8, Box<dyn std::error::Error>> {
         match instruction.as_str() {
             "t" => match bank.handle_transaction() {
                 Ok(_) => continue,
-                Err(err) => match err {
-                    e => println!("{}", e)
-                }
+                Err(err) => println!("{}", err),
             },
             "i" => bank.show_all_accounts(),
             "q" => return Ok(1),
