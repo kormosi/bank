@@ -2,17 +2,15 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::Display;
 use std::io::{self, Write};
-use std::num::ParseIntError;
-use std::process::exit;
 
 use hashbrown::HashMap;
 use thiserror::Error;
 
 pub fn init_bank() -> Bank {
     Bank::new(vec![
-        Account::new("Patrik".to_string(), 1000),
-        Account::new("Silvia".to_string(), 1000),
-        Account::new("Sofia".to_string(), 1000),
+        Account::new("patko".to_string(), 1000),
+        Account::new("siska".to_string(), 1000),
+        Account::new("sofka".to_string(), 1000),
     ])
 }
 
@@ -30,7 +28,7 @@ impl Account {
     }
 
     fn has_sufficient_funds(&self, amount: Amount) -> bool {
-        self.balance - amount > 0
+        self.balance - amount >= 0
     }
 
     fn subtract_funds(&mut self, amount: Amount) {
@@ -49,8 +47,10 @@ impl Display for Account {
 }
 
 #[derive(Error, Debug)]
-#[error("Insufficient funds error")]
-pub struct InsufficientFundsError;
+#[error("Account {} has insufficient funds", account_name)]
+pub struct InsufficientFundsError {
+    account_name: String,
+}
 
 #[derive(Debug)]
 struct AccountNamesTuple(String, String);
@@ -108,10 +108,16 @@ impl Bank {
             if from.has_sufficient_funds(tx_info.amount) {
                 from.subtract_funds(tx_info.amount);
                 to.add_funds(tx_info.amount);
+                println!("Transaction OK")
             } else {
-                return Err(CustomError::InsufficientFundsError(InsufficientFundsError));
+                return Err(CustomError::InsufficientFundsError(
+                    InsufficientFundsError {
+                        account_name: tx_info.from,
+                    },
+                ));
             }
         } else {
+            // Return proper error message
             match (
                 self.accounts.contains_key(&tx_info.from),
                 self.accounts.contains_key(&tx_info.to),
@@ -139,9 +145,6 @@ impl Bank {
                 }
                 (true, true) => unreachable!(),
             }
-            // return Err(CustomError::AccountDoesNotExistError(
-            //     AccountDoesNotExistError,
-            // ));
         }
         Ok(())
     }
@@ -188,9 +191,8 @@ fn get_tx_info() -> Result<TXInfo, CustomError> {
 
 fn print_instructions() {
     println!(
-        "
-i: account info, 
-t: perform transaction,
+        "i: account info
+t: perform transaction
 q: quit\n"
     );
 }
@@ -205,10 +207,10 @@ fn prompt_and_get_input(prompt: &str) -> Result<String, io::Error> {
 }
 
 fn get_valid_instruction_from_user() -> Result<String, io::Error> {
-    let mut user_input = String::new();
-    let valid_inputs = HashSet::from(["i", "t", "q"]);
+    let valid_inputs = HashSet::from(["i", "t", "q", "?"]);
 
     loop {
+        let mut user_input = String::new();
         print!("#: ");
         io::stdout().flush()?;
         io::stdin().read_line(&mut user_input)?;
@@ -216,11 +218,13 @@ fn get_valid_instruction_from_user() -> Result<String, io::Error> {
 
         if let Some(user_input) = valid_inputs.get(user_input) {
             return Ok(user_input.to_string());
+        } else {
+            println!("Invalid instruction");
         }
     }
 }
 
-pub fn run_app(mut bank: Bank) -> Result<i8, Box<dyn std::error::Error>> {
+pub fn run_app(mut bank: Bank) -> Result<i8, io::Error> {
     print_instructions();
 
     loop {
@@ -232,10 +236,8 @@ pub fn run_app(mut bank: Bank) -> Result<i8, Box<dyn std::error::Error>> {
             },
             "i" => bank.show_all_accounts(),
             "q" => return Ok(1),
-            _ => {
-                println!("invalid instruction");
-                continue;
-            }
+            "?" => print_instructions(),
+            _ => unreachable!(),
         };
     }
 }
