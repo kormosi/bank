@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::Display;
 use std::io::{self, Write};
+use std::os::unix::net::UnixStream;
 
 use hashbrown::HashMap;
 use thiserror::Error;
@@ -81,7 +82,7 @@ pub enum CustomError {
     InsufficientFundsError(#[from] InsufficientFundsError),
     #[error("Custom I/O Error")]
     IOError(#[from] std::io::Error),
-    #[error("Custom ParseInt Error")]
+    #[error("Incorrect amount")]
     ParseIntError(#[from] std::num::ParseIntError),
 }
 
@@ -224,11 +225,20 @@ fn get_valid_instruction_from_user() -> Result<String, io::Error> {
     }
 }
 
+fn send_instruction_to_server(instruction: &str) -> std::io::Result<()> {
+        const SOCK_LOCATION: &str = "/tmp/test.sock";
+        UnixStream::connect(SOCK_LOCATION)?.write_all(instruction.as_bytes())?;
+        Ok(())
+}
+
 pub fn run_app(mut bank: Bank) -> Result<i8, io::Error> {
     print_instructions();
 
     loop {
         let instruction = get_valid_instruction_from_user()?;
+
+        send_instruction_to_server(&instruction)?;
+
         match instruction.as_str() {
             "t" => match bank.handle_transaction() {
                 Ok(_) => continue,
