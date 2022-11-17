@@ -6,6 +6,7 @@ use std::os::unix::net::UnixDatagram;
 use std::path::Path;
 use std::{fs, str};
 
+use anyhow::Result;
 use hashbrown::HashMap;
 use serde_json::{self, Error as SerdeError};
 use thiserror::Error;
@@ -153,17 +154,11 @@ impl Bank {
         Ok(())
     }
 
-    fn show_all_accounts(&self) -> Result<String, SerdeError> {
-        // for acc in &self.accounts {
-        //     println!("{}", acc.1);
-        // }
-
+    fn return_account_info(&self) -> Result<String, SerdeError> {
         let mut accounts_map = VanillaHashMap::new();
-
         for (_, acc) in &self.accounts {
             accounts_map.insert(acc.name.as_str(), acc.balance);
         }
-
         serde_json::to_string(&accounts_map)
     }
 }
@@ -223,7 +218,7 @@ fn create_socket(socket_location: &str) -> io::Result<UnixDatagram> {
     };
 }
 
-pub fn run_app(mut bank: Bank) -> Result<i8, io::Error> {
+pub fn run_app(mut bank: Bank) -> Result<i8> {
     const SOCK_SRC: &str = "/tmp/server2client.sock";
 
     let socket = create_socket(SOCK_SRC)?;
@@ -232,18 +227,15 @@ pub fn run_app(mut bank: Bank) -> Result<i8, io::Error> {
         let mut instruction_buffer = vec![0; 1];
         match socket.recv_from(instruction_buffer.as_mut_slice()) {
             Ok((mut size, sender)) => {
-                let instruction = str::from_utf8(&instruction_buffer).unwrap();
-
-                // socket.send_to("abc".as_bytes(), sender.as_pathname().unwrap())?;
+                let instruction = str::from_utf8(&instruction_buffer)?;
 
                 match instruction {
                     "t" => match bank.handle_transaction() {
                         Ok(_) => continue,
                         Err(err) => println!("{}", err),
                     },
-                    // "i" => bank.show_all_accounts(),
                     "i" => {
-                        let serialized = bank.show_all_accounts().unwrap();
+                        let serialized = bank.return_account_info()?;
                         socket.send_to(serialized.as_bytes(), sender.as_pathname().unwrap())?;
                     }
                     "q" => return Ok(1),
