@@ -1,15 +1,13 @@
-use std::collections::HashSet;
+use std::collections::HashMap as VanillaHashMap;
 use std::error::Error;
 use std::fmt::Display;
 use std::io::{self, Write};
-use std::io::{prelude::*, BufReader};
-use std::os::unix::net::{UnixDatagram, UnixListener, UnixStream};
+use std::os::unix::net::UnixDatagram;
 use std::path::Path;
-use std::str;
-use std::time::Duration;
-use std::{fs, thread};
+use std::{fs, str};
 
 use hashbrown::HashMap;
+use serde_json::{self, Error as SerdeError};
 use thiserror::Error;
 
 pub fn init_bank() -> Bank {
@@ -155,10 +153,18 @@ impl Bank {
         Ok(())
     }
 
-    fn show_all_accounts(&self) {
-        for acc in &self.accounts {
-            println!("{}", acc.1);
+    fn show_all_accounts(&self) -> Result<String, SerdeError> {
+        // for acc in &self.accounts {
+        //     println!("{}", acc.1);
+        // }
+
+        let mut accounts_map = VanillaHashMap::new();
+
+        for (_, acc) in &self.accounts {
+            accounts_map.insert(acc.name.as_str(), acc.balance);
         }
+
+        serde_json::to_string(&accounts_map)
     }
 }
 
@@ -204,7 +210,7 @@ fn prompt_and_get_input(prompt: &str) -> Result<String, io::Error> {
     Ok(from.to_string())
 }
 
-fn create_listener(socket_location: &str) -> io::Result<UnixDatagram> {
+fn create_socket(socket_location: &str) -> io::Result<UnixDatagram> {
     // Create the socket
     let socket_path = Path::new(socket_location);
     if socket_path.exists() {
@@ -217,63 +223,35 @@ fn create_listener(socket_location: &str) -> io::Result<UnixDatagram> {
     };
 }
 
-
-
 pub fn run_app(mut bank: Bank) -> Result<i8, io::Error> {
     const SOCK_SRC: &str = "/tmp/server2client.sock";
-    const SOCK_DST: &str = "/tmp/client2server.sock";
 
-    let listener = create_listener(SOCK_SRC)?;
-
-    let sender = UnixDatagram::unbound()?;
+    let socket = create_socket(SOCK_SRC)?;
 
     loop {
-        println!("looping");
-        let mut instruction_buffer = vec![0; 3];
-        match listener.recv(instruction_buffer.as_mut_slice()) {
-            Ok(_) => {
-                let str_from_vec = str::from_utf8(&instruction_buffer).unwrap();
-                println!("{}", str_from_vec);
+        let mut instruction_buffer = vec![0; 1];
+        match socket.recv_from(instruction_buffer.as_mut_slice()) {
+            Ok((mut size, sender)) => {
+                let instruction = str::from_utf8(&instruction_buffer).unwrap();
 
-                sender.connect(SOCK_DST)?;
-                println!("sending");
-                match sender.send(b"abcd") {
-                    Ok(_) => println!("success"),
-                    Err(e) => println!("{e:?}"),
-                }
+                // socket.send_to("abc".as_bytes(), sender.as_pathname().unwrap())?;
+
+                match instruction {
+                    "t" => match bank.handle_transaction() {
+                        Ok(_) => continue,
+                        Err(err) => println!("{}", err),
+                    },
+                    // "i" => bank.show_all_accounts(),
+                    "i" => {
+                        let serialized = bank.show_all_accounts().unwrap();
+                        socket.send_to(serialized.as_bytes(), sender.as_pathname().unwrap())?;
+                    }
+                    "q" => return Ok(1),
+                    _ => unreachable!(),
+                };
             }
-            Err(e) => println!("recv function failed: {e:?}"),
+            Err(e) => println!("accept function failed: {e:?}"),
         }
     }
-    
     Ok(0)
-
-    // loop {
-    //     match listener.accept() {
-    //         Ok((mut socket, _addr)) => {
-
-    //             println!("reading instruction");
-
-    //             let mut instruction = String::new();
-    //             socket.read_to_string(&mut instruction)?;
-    //             println!("got '{instruction}'");
-
-    //             // match instruction.as_str() {
-    //             //     "t" => match bank.handle_transaction() {
-    //             //         Ok(_) => continue,
-    //             //         Err(err) => println!("{}", err),
-    //             //     },
-    //             //     // "i" => bank.show_all_accounts(),
-    //             //     "i" => {
-
-    //             //     }
-    //             //     "q" => return Ok(1),
-    //             //     _ => unreachable!(),
-    //             // };
-
-    //             // socket.write_all(b"hello world")?;
-    //         }
-    //         Err(e) => println!("accept function failed: {e:?}"),
-    //     }
-    // }
 }
