@@ -2,13 +2,14 @@ use std::collections::HashMap as VanillaHashMap;
 use std::error::Error;
 use std::fmt::Display;
 use std::io::{self, Write};
-use std::os::unix::net::UnixDatagram;
+use std::os::unix::net::{SocketAddr, UnixDatagram};
 use std::path::Path;
 use std::{fs, str};
 
 use anyhow::Result;
 use hashbrown::HashMap;
-use serde_json::{self, Error as SerdeError};
+use serde::{Deserialize, Serialize};
+use serde_json::{self, Error as SerdeError, Value};
 use thiserror::Error;
 
 pub fn init_bank() -> Bank {
@@ -19,12 +20,19 @@ pub fn init_bank() -> Bank {
     ])
 }
 
-type Amount = i64;
+type Amount = u64;
 
 #[derive(Debug)]
 struct Account {
     name: String,
     balance: Amount,
+}
+
+#[derive(Debug, Deserialize)]
+struct TxInfo {
+    from: String,
+    to: String,
+    amount: u64,
 }
 
 impl Account {
@@ -106,14 +114,12 @@ impl Bank {
         bank
     }
 
-    fn handle_transaction(&mut self) -> Result<(), CustomError> {
-        let tx_info = get_tx_info()?;
-
+    fn handle_transaction(&mut self, tx_info: TxInfo) -> Result<(), CustomError> {
         if let Some([from, to]) = self.accounts.get_many_mut([&tx_info.from, &tx_info.to]) {
             if from.has_sufficient_funds(tx_info.amount) {
                 from.subtract_funds(tx_info.amount);
                 to.add_funds(tx_info.amount);
-                println!("Transaction OK")
+                println!("Transaction OK");
             } else {
                 return Err(CustomError::InsufficientFundsError(
                     InsufficientFundsError {
@@ -154,7 +160,7 @@ impl Bank {
         Ok(())
     }
 
-    fn return_account_info(&self) -> Result<String, SerdeError> {
+    fn get_serialized_account_info(&self) -> Result<String, SerdeError> {
         let mut accounts_map = VanillaHashMap::new();
         for (_, acc) in &self.accounts {
             accounts_map.insert(acc.name.as_str(), acc.balance);
@@ -182,36 +188,11 @@ impl Display for Bank {
     }
 }
 
-struct TXInfo {
-    from: String,
-    to: String,
-    amount: Amount,
-}
-
-fn get_tx_info() -> Result<TXInfo, CustomError> {
-    let from = prompt_and_get_input("from")?;
-    let to = prompt_and_get_input("to")?;
-    let amount = prompt_and_get_input("amount")?;
-    let amount = amount.parse::<i64>()?;
-    Ok(TXInfo { from, to, amount })
-}
-
-fn prompt_and_get_input(prompt: &str) -> Result<String, io::Error> {
-    let mut from = String::new();
-    print!("{}: ", prompt);
-    io::stdout().flush()?;
-    io::stdin().read_line(&mut from)?;
-    let from = from.trim();
-    Ok(from.to_string())
-}
-
 fn create_socket(socket_location: &str) -> io::Result<UnixDatagram> {
-    // Create the socket
     let socket_path = Path::new(socket_location);
     if socket_path.exists() {
         fs::remove_file(socket_path)?;
     }
-
     match UnixDatagram::bind(socket_path) {
         Err(e) => return Err(e),
         Ok(listener) => return Ok(listener),
@@ -219,24 +200,46 @@ fn create_socket(socket_location: &str) -> io::Result<UnixDatagram> {
 }
 
 pub fn run_app(mut bank: Bank) -> Result<i8> {
+    // Create the socket
     const SOCK_SRC: &str = "/tmp/server2client.sock";
-
     let socket = create_socket(SOCK_SRC)?;
 
     loop {
         let mut instruction_buffer = vec![0; 1];
+
         match socket.recv_from(instruction_buffer.as_mut_slice()) {
-            Ok((mut size, sender)) => {
+            Ok((_, sender)) => {
                 let instruction = str::from_utf8(&instruction_buffer)?;
 
                 match instruction {
-                    "t" => match bank.handle_transaction() {
-                        Ok(_) => continue,
-                        Err(err) => println!("{}", err),
-                    },
+                    "t" => {
+                        // Send OK response to client
+                        if let Some(sender_path) = sender.as_pathname() {
+                            println!("sending 200");
+                            socket.send_to("200".as_bytes(), sender_path)?;
+                        } else {
+                            println!("Unable to send message to client");
+                        }
+
+                        let mut tx_info_buffer = vec![0; 512];
+                        match socket.recv_from(tx_info_buffer.as_mut_slice()) {
+                            Ok(_) => {
+                                // Trim trailing 0 characters
+                                let tx_info = str::from_utf8(&tx_info_buffer)?
+                                    .trim_end_matches(char::from(0));
+                                let tx_info: TxInfo = serde_json::from_str(tx_info)?;
+                                bank.handle_transaction(tx_info)?;
+                            }
+                            Err(e) => println!("recv_from function failed: {e:?}"),
+                        }
+                    }
                     "i" => {
-                        let serialized = bank.return_account_info()?;
-                        socket.send_to(serialized.as_bytes(), sender.as_pathname().unwrap())?;
+                        let serialized_acc_info = bank.get_serialized_account_info()?;
+                        if let Some(sender_path) = sender.as_pathname() {
+                            socket.send_to(serialized_acc_info.as_bytes(), sender_path)?;
+                        } else {
+                            println!("Unable to send message to client");
+                        }
                     }
                     "q" => return Ok(1),
                     _ => unreachable!(),
