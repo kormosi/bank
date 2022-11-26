@@ -1,15 +1,16 @@
 use std::collections::HashMap as VanillaHashMap;
 use std::error::Error;
 use std::fmt::Display;
-use std::io::{self, Write};
-use std::os::unix::net::{SocketAddr, UnixDatagram};
+use std::io;
+use std::os::unix::net::{UnixDatagram};
 use std::path::Path;
 use std::{fs, str};
 
 use anyhow::Result;
 use hashbrown::HashMap;
-use serde::{Deserialize, Serialize};
-use serde_json::{self, Error as SerdeError, Value};
+use log::{info, debug, error};
+use serde::{Deserialize};
+use serde_json::{self, Error as SerdeError};
 use thiserror::Error;
 
 pub fn init_bank() -> Bank {
@@ -19,6 +20,7 @@ pub fn init_bank() -> Bank {
         Account::new("sofka".to_string(), 1000),
     ])
 }
+
 
 type Amount = u64;
 
@@ -119,7 +121,6 @@ impl Bank {
             if from.has_sufficient_funds(tx_info.amount) {
                 from.subtract_funds(tx_info.amount);
                 to.add_funds(tx_info.amount);
-                println!("Transaction OK");
             } else {
                 return Err(CustomError::InsufficientFundsError(
                     InsufficientFundsError {
@@ -200,9 +201,11 @@ fn create_socket(socket_location: &str) -> io::Result<UnixDatagram> {
 }
 
 pub fn run_app(mut bank: Bank) -> Result<i8> {
+    info!("Entered the main loop of the program");
     // Create the socket
     const SOCK_SRC: &str = "/tmp/server2client.sock";
     let socket = create_socket(SOCK_SRC)?;
+    info!("Created the socket");
 
     loop {
         let mut instruction_buffer = vec![0; 1];
@@ -210,27 +213,31 @@ pub fn run_app(mut bank: Bank) -> Result<i8> {
         match socket.recv_from(instruction_buffer.as_mut_slice()) {
             Ok((_, sender)) => {
                 let instruction = str::from_utf8(&instruction_buffer)?;
+                info!("Received '{instruction}' instruction from client");
 
                 match instruction {
                     "t" => {
                         // Send OK response to client
                         if let Some(sender_path) = sender.as_pathname() {
-                            println!("sending 200");
                             socket.send_to("200".as_bytes(), sender_path)?;
+                            debug!("Sent '200' message to client");
                         } else {
-                            println!("Unable to send message to client");
+                            error!("Unable to get client's socket path");
                         }
 
                         let mut tx_info_buffer = vec![0; 512];
+
                         match socket.recv_from(tx_info_buffer.as_mut_slice()) {
                             Ok(_) => {
+                                info!("Received transaction details from client");
                                 // Trim trailing 0 characters
                                 let tx_info = str::from_utf8(&tx_info_buffer)?
                                     .trim_end_matches(char::from(0));
                                 let tx_info: TxInfo = serde_json::from_str(tx_info)?;
                                 bank.handle_transaction(tx_info)?;
+                                info!("Successfully performed transaction");
                             }
-                            Err(e) => println!("recv_from function failed: {e:?}"),
+                            Err(e) => error!("Error while receiving transaction info: {e:?}"),
                         }
                     }
                     "i" => {
